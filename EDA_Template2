@@ -1,0 +1,528 @@
+---
+title: "Exploratory Analysis Template"
+output:
+    rmdformats::readthedown:
+      highlight: pygments
+      code_folding: show
+      df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+<style type="text/css">
+p{ /* Normal  */
+   font-size: 14px;
+   line-height: 18px;
+}
+body{ /* Normal  */
+   font-size: 14px;
+}
+td {  /* Table  */
+   font-size: 12px;
+}
+h1 { /* Header 1 */
+font-size: 26px;
+color: #4294ce;
+}
+h2 { /* Header 2 */
+font-size: 22px;
+}
+h3 { /* Header 3 */
+font-size: 18px;
+}
+code.r{ /* Code block */
+  font-size: 12px;
+}
+pre { /* Code block */
+  font-size: 12px
+}
+#table-of-contents h2 {
+background-color: #4294ce;
+}
+#table-of-contents{
+background: #688FAD;
+}
+#nav-top span.glyphicon{
+color: #4294ce;
+}
+#postamble{
+background: #4294ce;
+border-top: ;
+}
+</style>
+
+
+Declare environment variables
+```{r}
+#Working directory
+wd <- c("C:/Users/tbishop/Documents/DCX")
+
+#Data file
+filename <- c("C:/Users/tbishop/Documents/Practice/Data/titanic.csv")
+
+#filename <- c("C:/Users/tbishop/Documents/Practice/Data/tmdb_5000_movies.csv")
+
+```
+
+
+
+
+Working directory is set and necessary packages are installed.
+  
+>Change to local directory and declare necessary packages
+
+```{r, message=FALSE, warning=FALSE}
+options(warn=-1)
+setwd(wd)
+
+if(!require(easypackages)){install.packages("easypackages")}
+library(easypackages)
+library(Hmisc)
+library(funModeling)
+library(GGally)
+library(VIM)
+library(DataExplorer)
+library(PerformanceAnalytics)
+library(corrplot)
+
+packages("readr", "stringr", "reshape2", "xgboost", "caret", "tibble", "tidyverse", "dplyr", "tidyr", "AzureML", prompt = FALSE)
+
+```
+
+
+# Import Data
+
+
+CSV Import
+
+```{r loadData, echo=FALSE, message=FALSE,warning=FALSE}
+dataset <- read_delim(filename , delim = ",", col_names = TRUE)
+```
+
+
+Gather parameters for use in exploration
+```{r}
+numeric_columns <- colnames(dataset[,sapply(dataset,is.numeric)])
+
+categorical_columns <- colnames(dataset[,sapply(dataset,is.character)])
+
+
+#Set target variable
+target <- c("Survived")
+
+```
+
+
+Import characters with 15 or more as characters and less as factors
+
+
+Examine the columns and formatting
+```{r}
+df_status(dataset)
+
+#Other
+#str(dataset)
+```
+
+Convert columns if necessary
+
+>Change column names as needed
+
+```{r}
+## Identify columns to be converted to factors
+factor_columns <- dataset[categorical_columns] %>% summarise_all(funs(n_distinct(.))) %>% melt() %>% filter(value <= 15) %>% select(variable) %>% .[["variable"]] %>% as.character()
+
+## Convert columns to factors if less than 15 unique values
+dataset[factor_columns] <- lapply(dataset[factor_columns], factor)
+
+## Integer conversion
+#dataset$Survived <- as.integer(dataset$Survived)
+
+## Date conversion
+#dataset$Survived <- as.Date(dataset$Survived)
+
+## Convert a column to character
+#dataset$status <- as.character(dataset$status)
+
+## Convert a column to factor
+#dataset$Survived <- as.factor(dataset$Survived)
+
+
+## Convert ALL categorical columns to factors
+#dataset[categorical_columns] <- lapply(dataset[categorical_columns], factor)
+
+```
+
+
+Data frame summary information
+```{r}
+summary(dataset)
+```
+
+# Missing data
+
+### NA's and NULLS
+
+>Replace column names with desired columns to be changed
+
+```{r}
+########################
+### Evaluation Tools ###
+########################
+
+## Sum of missing values per column
+colSums(is.na(dataset))
+
+## View records containing missing data
+#dataset[!complete.cases(dataset), ]
+
+```
+
+
+### Visualize missing data patterns
+
+```{r}
+mice_plot <- aggr(dataset, col=c('navyblue','yellow'),
+                    numbers=TRUE, sortVars=TRUE,
+                    labels=names(dataset), cex.axis=.7,
+                    gap=3, ylab=c("Missing data","Pattern"))
+```
+
+### Show percentage of missing values per feature
+
+```{r}
+plot_missing(dataset)
+```
+
+
+### Missing data handling options
+
+>Change column names to desired columns
+
+```{r}
+########################
+### Handling Options ###
+########################
+
+## Omit all incomplete (containing NA) records
+#dataset <- na.omit(dataset)
+
+## Drop specific columns with missing data
+#dataset <- dataset[ , !(names(dataset) %in% c("Column1", "Column2"))]
+
+
+## Recode missing values in a column:
+
+## mean of column
+#dataset$Age[is.na(dataset$Age)] <- mean(dataset$Age, na.rm = TRUE)
+
+
+## Inpute with MICE
+
+
+## inpute using KNN
+
+
+```
+
+
+# Categorical Data
+
+### Look at the data in the categrical columns
+
+```{r}
+glimpse(dataset[categorical_columns])
+```
+
+### Create frequency distributions for each categorical column
+```{r}
+freq(dataset[factor_columns])
+```
+
+
+Additional categorical tool - list all levels of categorical variables
+
+>Change column name to column of interest
+
+```{r}
+#Show counts of levels
+lengths(lapply(dataset[categorical_columns], levels))
+```
+
+
+## Factor Relevel
+
+Examine and re-order factors in the dataset
+
+>Change column name to column of interest
+
+```{r}
+## Show all levels of a factor
+#levels(dataset$Embarked)
+
+## Manually order factors
+#dataset$Embarked <- factor(dataset$Embarked, levels = c("S", "Q", "C"))
+
+## Make a specific factor first
+#dataset$Embarked <- relevel(dataset$Embarked, "Q")
+
+## Reverse the order of the factor
+#dataset$Embarked <- factor(dataset$Embarked, levels=rev(levels(dataset$Embarked)))
+
+```
+
+
+# Numerical Data
+
+Create histograms of each variables distribution
+```{r}
+plot_num(dataset)
+```
+
+Profile information for each numeric variable
+```{r}
+profiling_num(dataset)
+```
+
+
+
+# Collinearity
+
+### Correlation Matrix
+Compute a correlation matrix using all numeric columns
+```{r}
+cor(dataset[numeric_columns], use = "complete.obs")
+```
+
+
+The correlation coefficents can be visualized
+```{r}
+myCOR <- cor(dataset[numeric_columns], use = "complete.obs")
+corrplot.mixed(myCOR, number.cex = .8, tl.pos = "lt")
+```
+
+
+Examine any individual coefficients
+
+>Change column names to columns of interest
+
+```{r}
+#cor.test(dataset$column1, dataset$column2)
+```
+
+
+Chart additional correlation information
+```{r}
+chart.Correlation(dataset[numeric_columns], histogram = TRUE, pch = 19)
+```
+
+
+
+Alternative correlation plot
+```{r}
+#Alternative method - DataExplorer
+plot_correlation(dataset, type = 'continuous','Review.Date')
+
+```
+
+Alternative correlation plot- includes categorical variables
+```{r}
+plot_correlation(dataset, use = "pairwise.complete.obs")
+```
+
+
+Additional Option
+```{r}
+rcorr(as.matrix(dataset[numeric_columns]), type="pearson")
+```
+
+### Information Theory
+Additional correlation analysis, based on several information theory metrics between all variables in a data frame and a target variable.
+
+>Change the variable to target variable
+
+```{r}
+#var_rank_info(dataset, "Survived")
+```
+
+# Data Distribution
+
+### Distribution Plots
+
+Distribution plot between input and target variable
+
+```{r}
+## Plot all numeric columns
+cross_plot(data=dataset, input=numeric_columns, target= target)
+
+## Call specific columns only
+#cross_plot(data=dataset, input=c("budget", "runtime"), target= target)
+
+```
+
+
+### Box and Whisker Plots
+
+```{r}
+#Plot all numeric columns
+plotar(data=dataset, input = numeric_columns, target= target, plot_type="boxplot")
+
+#Call specific columns only
+#plotar(data=dataset, input = c("Age", "Fare"), target= target, plot_type="boxplot")
+
+
+```
+
+
+### Quantitative analysis for binary outcome
+
+>Input variable must be categorical. Target variable must be binary.
+
+```{r}
+#df_ca = categ_analysis(data = dataset, input = "Sex", target = target)
+
+#head(df_ca)
+```
+
+
+
+# Outlier Detection
+
+### Set thresholds for outlier detection. 
+
+The Tukey method formula: The bottom threshold is: Q1 - 3IQR. All below are considered as outliers. The top threshold is: Q1 + 3(IQR). All above are considered as outliers.
+
+The Hampel method formula: The bottom threshold is: median_value − 3(mad_value). All below are considered as outliers. The top threshold is: median_value + 3(mad_value). All above are considered as outliers.
+
+>Change columns to columns of interest
+
+```{r}
+## Tukey method outlier thresholds
+#tukey_outlier(dataset$Fare)
+
+## Hampel method outlier thresholds
+#hampel_outlier(dataset$Fare)
+```
+
+### Deal with Outliers
+
+>Change column names if using specific columns
+
+```{r}
+## Set all values above the outlier threshold to the threshold value for all columns
+#prep_outliers(data = dataset, input = numeric_columns, method = "hampel", type='stop')
+
+## Set all values above the outlier threshold to the threshold value for Specified columns
+#prep_outliers(data = dataset, input = c('Fare','Age'), method = "hampel", type='stop')
+```
+
+
+## Plot Columns to Identify Outliers
+
+>Change the declared y-value to the column of interest
+
+```{r}
+
+
+#for (i in 1:length(numeric_columns)){
+#print(numeric_columns[i])
+#ggplot(dataset, aes(x = "", y = numeric_columns[i])) + geom_boxplot(outlier.color="red", outlier.shape=8, outlier.size=4) + scale_y_continuous()
+
+#}
+
+
+```
+
+
+```{r}
+#ggplot(dataset, aes_string(x = "", y = numeric_columns[4])) + geom_boxplot(outlier.color="red", outlier.shape=8, outlier.size=4) + scale_y_continuous()
+```
+
+
+
+
+
+Examine the top 25 rows of a column containing outliers
+
+>Change the column name to the specified column
+
+```{r}
+tmpRev <- arrange(dataset, desc(Age)) %>% select(Age)
+tmpRev <- as.data.frame(head(tmpRev$Age, 25))
+names(tmpRev) <- "Age"
+tmpRev
+```
+
+
+# Duplicates
+
+### Count number of duplicated rows
+```{r}
+nrow(dataset) - nrow(unique(dataset))
+```
+
+### Review duplicate rows
+```{r}
+#Show all duplicated rows
+dataset[duplicated(dataset), ]
+```
+
+
+
+
+
+
+# Additional Testing Tools
+
+
+```{r}
+data(dataset, package = "reshape")
+pm <- ggpairs(dataset[numeric_columns])
+#pm <- ggpairs(dataset[numeric_columns], columns = c("total_bill", "time", "tip"))
+pm
+```
+
+
+
+
+
+
+
+
+
+
+
+## Data Munging Tools
+
+```{r}
+## Apply filters based on known business rules
+#data <- filter(dataset, dataset$Number == 0, dataset$Category %in% c("Active", "Complete"))
+
+
+## Drop unusused columns 
+#data <- dataset[ , !(names(dataset) %in% c("TaskBaselineFinishDate", "TaskBaselineStartDate"))]
+```
+
+
+
+## Data Splitting and Grouping Tools
+
+```{r}
+## Filter dataset, group by column and create new aggregate column
+#constructionstart <- builddata %>%
+#  filter(L2Milestone == "Construction Start" | T1Milestone == "Construction Start") %>%
+#  group_by(ProjectID) %>%
+#  summarise(ConstructionStartDate = min(TaskStartDate))
+
+```
+
+
+
+
+
+
+
+
+
