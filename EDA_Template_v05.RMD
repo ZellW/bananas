@@ -53,8 +53,6 @@ border-top: ;
 }
 </style>
 
-
-
 **To Do List**
 
 1. auditing table to log every data transformation made on the dataset
@@ -81,15 +79,49 @@ packages("Hmisc", "funModeling", "GGally", "VIM", "DataExplorer", "PerformanceAn
 dataset <- read_delim(file.choose() , delim = ",", col_names = TRUE)
 
 ## If the dataset has more than 10,000 records, take a sample of 10,000 for use
-dataset <- if(nrow(dataset)>10000) {sample_n(dataset, 10000)}
+if(nrow(dataset) > 10000){dataset = sample_n(dataset, 10000)}
+```
+
+## Replace NULLs with NA
+
+```{r}
+## Examine columns for NULLs
+#table(dataset[1])
+
+#dplyr statement, take nulls and make them NA. ALSO add a flag column that designates that the row had null
+dataset  <-  dataset %>% replace(.=="NULL", NA)
+df_status(dataset)
+```
+
+## Remove Vars with No Variability
+
+In some situations, data may have a single unique value (i.e. a "zero-variance predictor"). For many models (excluding tree-based models), this may cause the model to crash or the fit to be unstable.
+
+Similarly, predictors might have only a handful of unique values that occur with very low frequencies. The concern is these predictors may become zero-variance predictors when the data are split into cross-validation/bootstrap sub-samples or that a few samples may have an undue influence on the model. These "near-zero-variance" predictors may need to be identified and eliminated prior to modeling.
+
+To identify these types of predictors, the following two metrics can be calculated:
+
+- the frequency of the most prevalent value over the second most frequent value (called the "frequency ratio''), which would be near one for well-behaved predictors and very large for highly-unbalanced data 
+- the *percent of unique values* is the number of unique values divided by the total number of samples (times 100) that approaches zero as the granularity of the data increases
+
+If the frequency ratio is greater than a pre-specified threshold and the unique value percentage is less than a threshold, we might consider a predictor to be near zero-variance.
+
+We would not want to falsely identify data that have low granularity but are evenly distributed, such as data from a discrete uniform distribution. Using both criteria should not falsely detect such predictors.
+
+```{r}
+nzv <- nearZeroVar(dataset, saveMetrics = TRUE)
+nzv
+```
+If `TRUE` is returned for `zeroVa` or `nzv`, determine if these values should be removed.
+
+```{r removeVarNoVariability}
+#dataset <- dataset[, -nzv]
 ```
 
 Collect variables for use in data exploration
 ```{r}
-numeric_columns <- colnames(dataset[,sapply(dataset,is.numeric)])
-
-categorical_columns <- colnames(dataset[,sapply(dataset,is.character)])
-
+numeric_columns <- colnames(dataset[, sapply(dataset, is.numeric)])
+categorical_columns <- colnames(dataset[, sapply(dataset, is.character)])
 ```
 
 # Explore Data
@@ -116,10 +148,7 @@ myIDs[,1]
 > ID variables rarely useful in algorithm development.  Consider removing from dataset.
 
 ```{r}
-if(nrow(myIDs) > 0){
- dataset <- dataset %>% select(-contains("id")) 
-}
-
+if(nrow(myIDs) > 0){dataset <- dataset %>% select(-contains("id"))}
 ```
 
 ## Select Label
@@ -128,50 +157,11 @@ if(nrow(myIDs) > 0){
 myLabel <- "EnterDependentVariableName"
 ```
 
-## Remove NULLs
-
-```{r}
-## Examine columns for NULLs
-#table(dataset[1])
-
-#dplyr statement, take nulls and make them NA. ALSO add a flag column that designates that the row had null
-dataset  <-  dataset %>% replace(.=="NULL", NA)
-
-df_status(dataset)
-```
-
-## Variability
-
-In some situations, data may have a single unique value (i.e. a "zero-variance predictor"). For many models (excluding tree-based models), this may cause the model to crash or the fit to be unstable.
-
-Similarly, predictors might have only a handful of unique values that occur with very low frequencies. The concern is these predictors may become zero-variance predictors when the data are split into cross-validation/bootstrap sub-samples or that a few samples may have an undue influence on the model. These "near-zero-variance" predictors may need to be identified and eliminated prior to modeling.
-
-To identify these types of predictors, the following two metrics can be calculated:
-
-- the frequency of the most prevalent value over the second most frequent value (called the "frequency ratio''), which would be near one for well-behaved predictors and very large for highly-unbalanced data 
-- the *percent of unique values* is the number of unique values divided by the total number of samples (times 100) that approaches zero as the granularity of the data increases
-
-If the frequency ratio is greater than a pre-specified threshold and the unique value percentage is less than a threshold, we might consider a predictor to be near zero-variance.
-
-We would not want to falsely identify data that have low granularity but are evenly distributed, such as data from a discrete uniform distribution. Using both criteria should not falsely detect such predictors.
-
-```{r}
-nzv <- nearZeroVar(dataset, saveMetrics = TRUE)
-nzv
-```
-
-If `TRUE` is returned for `zeroVa` or `nzv`, determine if these values should be removed.
-
-```{r}
-#dataset <- dataset[, -nzv]
-```
-
-
 ```{r}
 ## List columns rank ordered by variability
 rowcount <- nrow(dataset)
-df_status(dataset) %>% select(variable, unique) %>% mutate(rowcount = rowcount, Distinct = rowcount/unique) %>% arrange(desc(unique))
-
+df_status(dataset) %>% select(variable, unique) %>% mutate(rowcount = rowcount, 
+                       Distinct = rowcount/unique) %>% arrange(desc(unique))
 ```
 
 # Date Handling
@@ -196,7 +186,6 @@ Date handling tools are part of the lubridate package.
 
 ## ymd_hms("2011-06-04 12:00:00", tz = "Pacific/Auckland")
 #dataset$Date <- ymd_hms(dataset$Date)
-
 ```
 
 ### Parse Date Components
@@ -221,7 +210,6 @@ Date handling tools are part of the lubridate package.
 #dataset$month <- month(dataset$Date)
 
 #dataset$year <- year(dataset$Date)
-
 ```
 
 ### Intervals
@@ -252,10 +240,7 @@ Two dates can be combined to create a saved interval. This is a range of time be
 
 ## tests for the case where two intervals begin or end at the same moment when arranged chronologically. The direction of each interval is ignored. int_align tests whether the earliest or latest moments of each interval occur at the same time
 #int_aligns(interval_1, interval_2))
-
 ```
-
-
 
 ## Data Conversion Tools
 
@@ -293,12 +278,9 @@ dataset[factor_columns] <- lapply(dataset[factor_columns], factor)
 ## Convert a column to factor
 #dataset$Survived <- as.factor(dataset$Survived)
 
-
 ## Convert ALL categorical columns to factors
 #dataset[categorical_columns] <- lapply(dataset[categorical_columns], factor)
-
 ```
-
 
 # Missing data
 
@@ -310,7 +292,6 @@ dataset[factor_columns] <- lapply(dataset[factor_columns], factor)
 #dplyr statement, take nulls and make them NA. ALSO add a flag column that designates that the row had null
 dataset <- dataset %>% replace(.=="NULL", NA)
 ```
-
 
 ### NA's
 
@@ -324,9 +305,7 @@ colSums(is.na(dataset))
 
 ## View records containing missing data
 #dataset[!complete.cases(dataset), ]
-
 ```
-
 
 #### Visualize Missing Data Patterns
 
@@ -343,7 +322,6 @@ mice_plot <- aggr(dataset, col=c('navyblue','yellow'),
 plot_missing(dataset)
 ```
 
-
 ## Missing Data Handling Options
 
 ### Exclude
@@ -351,13 +329,11 @@ plot_missing(dataset)
 > Change column names to desired columns
 
 ```{r}
-
 ## Omit all incomplete (containing NA) records
 dataset <- na.omit(dataset)
 
 ## Drop specific columns with missing data
 #dataset <- dataset[ , !(names(dataset) %in% c("Column1", "Column2"))]
-
 ```
 
 ### Inpute Missing Data
@@ -367,11 +343,9 @@ dataset <- na.omit(dataset)
 ```{r}
 ## mean of column
 #dataset$Age[is.na(dataset$Age)] <- mean(dataset$Age, na.rm = TRUE)
-
 ```
 
-
-#### Inpute With MICE
+#### Impute With MICE
 
 MICE assumes that the missing data are Missing at Random (MAR), which means that the probability that a value is missing depends only on observed value and can be predicted using them. It imputes data on a variable by variable basis by specifying an imputation model per variable.
 
@@ -390,12 +364,9 @@ By default, linear regression is used to predict continuous missing values. Logi
 
 ## Add the inputed data back into the dataset to complete it
 #dataset_mice <- complete(imputed_Data,1)
-
-
 ```
 
-
-#### Inpute With missForest
+#### Impute With missForest
 
 missForest is an implementation of random forest algorithm. It's a non parametric imputation method applicable to various variable types.It builds a random forest model for each variable. Then it uses the model to predict missing values in the variable with the help of observed values.
 
@@ -404,15 +375,12 @@ Since bagging works well on categorical variable too, we don't need to remove th
 ```{r}
 ## This probably needs a matrix
 
-
 #library(missForest)
 
 #imputed_Data <- missForest(dataset)
-
 ```
 
-
-#### Inpute With Hmisc
+#### Impute With Hmisc
 
 aregImpute() allows mean imputation using additive regression, bootstrapping, and predictive mean matching.
 
@@ -427,7 +395,6 @@ Then, it uses predictive mean matching (default) to impute missing values. Predi
 ## Inpute missing data
 #impute_arg <- aregImpute(~ Age + Fare + Sex, data = dataset, n.impute = 5)
 ```
-
 
 # Categorical Data
 
@@ -473,7 +440,6 @@ Examine and re-order factors in the dataset
 
 ## Reverse the order of the factor
 #dataset$Embarked <- factor(dataset$Embarked, levels=rev(levels(dataset$Embarked)))
-
 ```
 
 # Numerical Data
@@ -503,7 +469,6 @@ text_tbl <- data.frame(
 
 kable(text_tbl, "html") %>%
   kable_styling(bootstrap_options = c("striped", "hover"))
-
 ```
 
 # Collinearity
@@ -532,9 +497,8 @@ Examine any individual coefficients
 #cor.test(dataset$column1, dataset$column2)
 ```
 
-### 
-
 Chart additional correlation information
+
 ```{r}
 chart.Correlation(select_if(dataset,is.numeric), histogram = TRUE, pch = 19)
 ```
@@ -545,7 +509,6 @@ Alternative correlation plot
 ```{r}
 #Alternative method - DataExplorer
 plot_correlation(dataset, type = 'continuous','Review.Date')
-
 ```
 
 Alternative correlation plot- includes categorical variables
@@ -581,9 +544,7 @@ try(cross_plot(data=dataset, input=colnames(select_if(dataset,is.numeric)), targ
 
 ## Call specific columns only
 #cross_plot(data=dataset, input=c("budget", "runtime"), target= target)
-
 ```
-
 
 ## Box Plots
 
@@ -596,7 +557,6 @@ try(plotar(data=dataset, input = colnames(select_if(dataset,is.numeric)), target
 
 ```
 
-
 ### Quantitative Analysis for Binary Outcome
 
 > Input variable must be categorical. Target variable must be binary.
@@ -607,7 +567,6 @@ try(plotar(data=dataset, input = colnames(select_if(dataset,is.numeric)), target
 #head(df_ca)
 ```
 
-
 # Outlier Detection
 
 ## Plot Columns to Identify Outliers
@@ -615,14 +574,11 @@ try(plotar(data=dataset, input = colnames(select_if(dataset,is.numeric)), target
 > Change the declared y-value to the column of interest
 
 ```{r}
-
-
 #for (i in 1:length(numeric_columns)){
 #print(numeric_columns[i])
 
 #tempplot <- ggplot(dataset, aes(x = "", y = numeric_columns[i])) + geom_boxplot(outlier.color="red", outlier.shape=8, outlier.size=4) + #scale_y_continuous()
 #}
-
 ```
 
 ```{r}
@@ -634,8 +590,6 @@ try(plotar(data=dataset, input = colnames(select_if(dataset,is.numeric)), target
 # 
 # myLoop_DF <- data.frame(x = seq(1, cntNumNames-remainder, by = maxPlot), y = seq(6, cntNumNames, by = maxPlot))
 # 
-# 
-# 
 # for (i in 1:length(numeric_columns)){
 # print(numeric_columns[i])
 # 
@@ -643,9 +597,7 @@ try(plotar(data=dataset, input = colnames(select_if(dataset,is.numeric)), target
 # 
 # print(tempplot)
 # }
-
 ```
-
 
 ```{r}
 outlierKD <- function(dt, var) {
@@ -686,9 +638,7 @@ outlierKD <- function(dt, var) {
 for (i in 1:length(colnames(select_if(dataset,is.numeric)))){
 outlierKD(dataset, get(paste(colnames(select_if(dataset,is.numeric)[i]))))
 }
-
 ```
-
 
 Examine the top 25 rows of a column containing outliers
 
@@ -700,7 +650,6 @@ Examine the top 25 rows of a column containing outliers
 #names(tmpRev) <- "Age"
 #tmpRev
 ```
-
 
 ## Outlier Handling Options
 
@@ -734,7 +683,6 @@ The Hampel method formula: The bottom threshold is: median_value ??? 3(mad_value
 #prep_outliers(data = dataset, input = c('Fare','Age'), method = "hampel", type='stop')
 ```
 
-
 # Duplicates
 
 ## Examine Duplicates
@@ -743,10 +691,10 @@ The Hampel method formula: The bottom threshold is: median_value ??? 3(mad_value
 ```{r}
 ## Show count of duplicate rows
 nrow(dataset) - nrow(unique(dataset))
-
 ```
 
 ### Review Duplicate Rows
+
 ```{r}
 ## Show all duplicated rows
 head(dataset[duplicated(dataset), ])
@@ -756,9 +704,7 @@ head(dataset[duplicated(dataset), ])
 ```{r}
 ## Remove duplicate rows
 #dataset <- dataset[!duplicated(df), ]
-
 ```
-
 
 # Additional Testing Tools
 
@@ -769,19 +715,13 @@ pm <- ggpairs(select_if(dataset,is.numeric))
 pm
 ```
 
-
 # Pre Processing
 
 ## Dimensionality Reduction (PCA)
 
-
 ## Manage Unbalanced Data
 
-
 ## Feature Engineering
-
-
-
 
 # Useful Code
 
@@ -791,11 +731,9 @@ pm
 ## Apply filters based on known business rules
 #data <- filter(dataset, dataset$Number == 0, dataset$Category %in% c("Active", "Complete"))
 
-
 ## Drop unusused columns 
 #data <- dataset[ , !(names(dataset) %in% c("TaskBaselineFinishDate", "TaskBaselineStartDate"))]
 ```
-
 
 ## Data Splitting and Grouping Tools
 
@@ -805,14 +743,5 @@ pm
 #  filter(L2Milestone == "Construction Start" | T1Milestone == "Construction Start") %>%
 #  group_by(ProjectID) %>%
 #  summarise(ConstructionStartDate = min(TaskStartDate))
-
 ```
-
-
-
-
-
-
-
-
 
