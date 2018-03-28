@@ -57,20 +57,22 @@ border-top: ;
 
 1. auditing table to log every data transformation made on the dataset
 2. Null replacement function to log existence and column
-3. Add column name titles to the boxplot loop function
+3. Add column name titles to the boxplot loop function - resolved 3/28/18 CW
 4. Look at edarf for inputation and EDA
 5. Revisit automatic datetime identification (maybe using grepl)
 6. Add pirate charts using yarrr package
+7. Consider adding Amelia for imputation method
 
 --------
 
 # Load Libraries
 
-```{r message=FALSE}
+```{r loadPackages, message=FALSE, warning=FALSE}
 
 if(!require(easypackages)){install.packages("easypackages")}
 packages("Hmisc", "funModeling", "GGally", "VIM", "DataExplorer", "PerformanceAnalytics", 
-         "corrplot","plyr", "dplyr", "tidyr", "knitr", "mice","kableExtra", "readr", "caret", "lubridate", prompt = FALSE)
+         "corrplot","plyr", "dplyr", "tidyr", "knitr", "mice","kableExtra", "readr", "caret", 
+         "lubridate", "gridExtra","missForest", prompt = FALSE)
 ```
 
 # Import Data
@@ -84,7 +86,7 @@ if(nrow(dataset) > 10000){dataset = sample_n(dataset, 10000)}
 
 ## Replace NULLs with NA
 
-```{r}
+```{r replaceNULLs}
 ## Examine columns for NULLs
 #table(dataset[1])
 
@@ -108,9 +110,10 @@ If the frequency ratio is greater than a pre-specified threshold and the unique 
 
 We would not want to falsely identify data that have low granularity but are evenly distributed, such as data from a discrete uniform distribution. Using both criteria should not falsely detect such predictors.
 
-```{r}
+```{r nearZeroVar}
 nzv <- nearZeroVar(dataset, saveMetrics = TRUE)
 nzv
+rm(nzv)
 ```
 If `TRUE` is returned for `zeroVa` or `nzv`, determine if these values should be removed.
 
@@ -140,20 +143,20 @@ df_status(dataset)
 
 ## Identify Potential ID Columns
 
-```{r}
+```{r IDcol}
 ## Parse column name to look for ID to suggest ID columns
 myIDs <- filter(df_status(dataset), grepl("id", variable, ignore.case = TRUE)) %>% select(variable, type, unique)
 myIDs[,1]
 ```
 > ID variables rarely useful in algorithm development.  Consider removing from dataset.
 
-```{r}
+```{r removeIDcol}
 if(nrow(myIDs) > 0){dataset <- dataset %>% select(-contains("id"))}
 ```
 
 ## Select Label
 
-```{r}
+```{r selectLabel}
 myLabel <- "EnterDependentVariableName"
 ```
 
@@ -162,6 +165,7 @@ myLabel <- "EnterDependentVariableName"
 rowcount <- nrow(dataset)
 df_status(dataset) %>% select(variable, unique) %>% mutate(rowcount = rowcount, 
                        Distinct = rowcount/unique) %>% arrange(desc(unique))
+rm(rowcount)
 ```
 
 # Date Handling
@@ -170,7 +174,7 @@ Date handling tools are part of the lubridate package.
 
 ## Convert Date Columns to Standard Format
 
-```{r}
+```{r formatDate}
 ## First set the order in which the date parts appear. The package can parse a variety of different formats as long as it knows the order
 
 ## ymd("20110604")
@@ -190,7 +194,7 @@ Date handling tools are part of the lubridate package.
 
 ### Parse Date Components
 
-```{r}
+```{r parseDate}
 ## Parse the converted date column into date components
 
 #dataset$second <- second(dataset$Date)
@@ -216,7 +220,7 @@ Date handling tools are part of the lubridate package.
 
 Two dates can be combined to create a saved interval. This is a range of time between a start and end date which can interact with other dates in several ways. Note that intervals always output as a datetime, down to the second. 
 
-```{r}
+```{r dateIntervals}
 ## Establish an interval by supplying a start and end date
 #interval <- interval(startdate, enddate) 
 
@@ -252,20 +256,21 @@ Factors are used to work with categorical variables, variables that have a fixed
 
 > Adjust number in filter to change unique count cutoff limit
 
-```{r, warning=FALSE}
+```{r charTofactor, warning=FALSE}
 ## Identify columns to be converted to factors
 temp <- dataset[colnames(dataset[,sapply(dataset,is.character)])] %>% summarise_all(funs(n_distinct(.)))
 factor_columns <- melt(as.data.frame(temp)) %>% filter(value <= 15) %>% select(variable) %>% .[["variable"]] %>% as.character()
 
 ## Convert columns to factors if less than 15 unique values
 dataset[factor_columns] <- lapply(dataset[factor_columns], factor)
+rm(temp)
 ```
 
 ### Additional Data Conversion
 
 > Change column names as needed
 
-```{r, message=FALSE, warning=FALSE}
+```{r otherVarchanges, message=FALSE, warning=FALSE}
 ## Integer conversion
 #dataset$Survived <- as.integer(dataset$Survived)
 
@@ -284,22 +289,11 @@ dataset[factor_columns] <- lapply(dataset[factor_columns], factor)
 
 # Missing data
 
-## Examination
-
-### NULLs
-
-```{r}
-#dplyr statement, take nulls and make them NA. ALSO add a flag column that designates that the row had null
-dataset <- dataset %>% replace(.=="NULL", NA)
-```
-
-### NA's
-
-#### Missing Data Counts
+## Missing Data Counts
 
 > Replace column names with desired columns to be changed
 
-```{r}
+```{r NAbyCol}
 ## Sum of missing values per column
 colSums(is.na(dataset))
 
@@ -307,7 +301,7 @@ colSums(is.na(dataset))
 #dataset[!complete.cases(dataset), ]
 ```
 
-#### Visualize Missing Data Patterns
+## Visualize Missing Data Patterns
 
 ```{r}
 mice_plot <- aggr(dataset, col=c('navyblue','yellow'),
@@ -316,7 +310,7 @@ mice_plot <- aggr(dataset, col=c('navyblue','yellow'),
                     gap=3, ylab=c("Missing data","Pattern"))
 ```
 
-#### Percentage of Missing Values Per Feature
+### Percentage of Missing Values Per Feature
 
 ```{r}
 plot_missing(dataset)
@@ -336,16 +330,14 @@ dataset <- na.omit(dataset)
 #dataset <- dataset[ , !(names(dataset) %in% c("Column1", "Column2"))]
 ```
 
-### Inpute Missing Data
-
-#### Simple Recoding Methods
+### Impute with Mean
 
 ```{r}
 ## mean of column
 #dataset$Age[is.na(dataset$Age)] <- mean(dataset$Age, na.rm = TRUE)
 ```
 
-#### Impute With MICE
+### Impute With MICE
 
 MICE assumes that the missing data are Missing at Random (MAR), which means that the probability that a value is missing depends only on observed value and can be predicted using them. It imputes data on a variable by variable basis by specifying an imputation model per variable.
 
@@ -353,7 +345,7 @@ For example: Suppose we have X1, X2..Xk variables. If X1 has missing values, the
 
 By default, linear regression is used to predict continuous missing values. Logistic regression is used for categorical missing values. Once this cycle is complete, multiple data sets are generated. These data sets differ only in imputed missing values. Generally, it's considered to be a good practice to build models on these data sets separately and combining their results.
 
-```{r}
+```{r MICE}
 ## Inpute missing data
 #imputed_Data <- mice(dataset, m=5, maxit = 50, method = 'pmm', seed = 500)
 
@@ -366,18 +358,24 @@ By default, linear regression is used to predict continuous missing values. Logi
 #dataset_mice <- complete(imputed_Data,1)
 ```
 
-#### Impute With missForest
+### Impute With missForest
 
 missForest is an implementation of random forest algorithm. It's a non parametric imputation method applicable to various variable types.It builds a random forest model for each variable. Then it uses the model to predict missing values in the variable with the help of observed values.
 
 Since bagging works well on categorical variable too, we don't need to remove them here.
 
-```{r}
-## This probably needs a matrix
+> It appears `character` variables cause missForest to error
 
-#library(missForest)
+> missForest not a good solution when few distinct values in a column
 
-#imputed_Data <- missForest(dataset)
+```{r missForest}
+## Interesting, in the package the function prodNA can be used to randomly introcude NAs
+dataset_mis <- prodNA(dataset, noNA = 0.1)
+dataset_mis <- dataset_mis %>% mutate_if(is.character, is.factor)
+sum(is.na(dataset_mis))
+imputed_Data_missF <- missForest(as.data.frame(dataset_mis))
+sum(is.na(imputed_Data))
+rm(dataset_mis)
 ```
 
 #### Impute With Hmisc
@@ -388,7 +386,7 @@ In bootstrapping, different bootstrap resamples are used for each of multiple im
 
 Then, it uses predictive mean matching (default) to impute missing values. Predictive mean matching works well for continuous and categorical (binary & multi-level)
 
-```{r}
+```{r Hmisc}
 ## Testing tool for seeding missing data
 #dataset <- prodNA(dataset, noNA = 0.1)
 
@@ -581,23 +579,29 @@ try(plotar(data=dataset, input = colnames(select_if(dataset,is.numeric)), target
 #}
 ```
 
+> Below, change the variable cutOff to meet you needs.  cutOff determines the number of unique 
+values in each numeric column needed to produce a boxplot.
+
 ```{r}
-# cntNumNames <- length((select_if(dataset,is.numeric)))
-# #Make plots max 6 at a time - change if needed
-# maxPlot = 6
-# loopCnt <- cntNumNames %/% maxPlot
-# remainder <- cntNumNames %% maxPlot
-# 
-# myLoop_DF <- data.frame(x = seq(1, cntNumNames-remainder, by = maxPlot), y = seq(6, cntNumNames, by = maxPlot))
-# 
-# for (i in 1:length(numeric_columns)){
-# print(numeric_columns[i])
-# 
-# tempplot <- select_if(dataset,is.numeric)[myLoop_DF[i,1]:myLoop_DF[i,2]] %>% gather() %>% ggplot(aes(x = "", y = value)) + geom_boxplot(outlier.color="red", outlier.shape=8, outlier.size=4) + scale_y_continuous()
-# 
-# print(tempplot)
-# }
+cutOff = 10 #Number of unique values required to output a boxplot
+tmpDF <- dataset[, sapply(dataset, is.numeric)] #get only numeric columns
+tmpDF <- na.omit(tmpDF) #just a check to avoid ggplot messages
+
+#keep cols that meet cutOff requirement
+tmpDF <- tmpDF[, sapply(tmpDF, function(col) length(unique(col))) >= cutOff] 
+tmpDF <- data.frame(tmpDF)
+
+#https://stackoverflow.com/questions/15027659/how-do-you-draw-a-boxplot-without-specifying-x-axis
+plot_data = function (data, column)
+    ggplot(data = data, aes_string(x = factor(0), y = column)) + 
+    geom_boxplot(outlier.color="red", outlier.shape=8, outlier.size=2) + xlab(column) + ylab("")
+
+myplots <- lapply(colnames(tmpDF), plot_data, data = tmpDF)
+myplots
+rm(cutOff, tmpDF, myplots)
 ```
+
+
 
 ```{r}
 outlierKD <- function(dt, var) {
