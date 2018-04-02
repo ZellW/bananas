@@ -1,0 +1,616 @@
+---
+title: "Ensemble Template"
+author: "Trevor Bishop"
+date: "March 27, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library("caret")
+library("mlbench")
+library("pROC")
+
+library("rpart")
+library("caretEnsemble")
+
+library("caTools")
+```
+
+# Import Data
+
+```{r loadData, echo=FALSE, message=FALSE,warning=FALSE}
+dataset <- read_delim(file.choose() , delim = ",", col_names = TRUE)
+```
+
+
+Packages to use for reporting results:
+
+-ModelR
+-Caret
+
+
+
+
+
+
+
+# supervised
+
+## Classification
+
+```{r}
+myLabel <- "Survived"
+```
+
+Titanic Dataset preprocessing
+```{r}
+## Pull title from name
+dataset$Title <- ifelse(grepl('Mr ',dataset$Name),'Mr',ifelse(grepl('Mrs ',dataset$Name),'Mrs',ifelse(grepl('Miss',dataset$Name),'Miss','Nothing'))) 
+
+## Inpute missing age data
+dataset$Age[is.na(dataset$Age)] <- median(dataset$Age, na.rm=T)
+
+dataset <- dataset[c('Pclass', 'Age',    'Sex',   'Title', 'Survived')]
+
+## Create dummy variables for factors
+
+dataset$Title <- as.factor(dataset$Title)
+titanicDummy <- dummyVars("~.",data=dataset, fullRank=F)
+dataset <- as.data.frame(predict(titanicDummy,dataset))
+print(names(dataset))
+
+
+myLabel <- 'Survived'
+predictors <- names(dataset)[names(dataset) != myLabel]
+
+print(str(dataset))
+```
+
+Establish factor predictor for models that need it
+```{r}
+dataset$Survived2 <- ifelse(dataset$Survived==1,'yes','no')
+dataset$Survived2 <- as.factor(dataset$Survived2)
+myLabel <- 'Survived2'
+```
+
+### Create Train and Test Datasets
+
+> Set the 
+
+```{r}
+set.seed(12345)
+
+## Create a partition in the data. The p specifies the percentage split
+inTrain <- createDataPartition(y = dataset[[myLabel]], p = .75, list = FALSE)
+
+## Create training and test sets from the original data
+train <- dataset[ inTrain,]
+test <- dataset[-inTrain,]
+
+```
+
+
+
+### MultiClass Classification - Manual Calculations Method
+
+#### Set Control Model
+
+Types of control model summary functions:
+defaultSummary(data, lev = NULL, model = NULL)
+postResample(pred, obs)
+twoClassSummary(data, lev = NULL, model = NULL)
+mnLogLoss(data, lev = NULL, model = NULL)
+multiClassSummary(data, lev = NULL, model = NULL)
+prSummary(data, lev = NULL, model = NULL)
+
+
+```{r}
+text_tbl <- data.frame(
+  Item = c("method", "number", "repeats" ,"classProbs", "SummaryFunction", "savePredictions", "classProbs"),
+  Definition = c(
+    "The resampling method",
+    "Either the number of folds or number of resampling iterations",
+    "For repeated k-fold cross-validation only: the number of complete sets of folds to compute", 
+    "a logical; should class probabilities be computed for classification models (along with predicted values) in each resample?",
+    "A function to compute performance metrics across resamples. The arguments to the function should be the same as those in defaultSummary.",
+    "n indicator of how much of the hold-out predictions for each resample should be saved. Values can be either 'all', 'final', or 'none'. 'final' saves the predictions for the optimal tuning parameters.",
+    "a logical; should class probabilities be computed for classification models (along with predicted values) in each resample?"
+  )
+)
+
+kable(text_tbl, "html") 
+```
+
+
+
+```{r}
+set.seed(12345)
+
+control <- trainControl(method="cv", number=10, repeats=3, classProbs= TRUE, summaryFunction = twoClassSummary)
+
+# can be "Accuracy",   "logLoss", "ROC",   "Kappa"
+metric <- "Accuracy"
+```
+
+```{r}
+df_status(dataset)
+```
+
+
+
+
+
+
+
+#### Train Models
+
+Individual models are calculated here
+
+```{r}
+train_tbl <- data.frame(
+  Item = c("x","y","method", "trControl", "metric" ,"preProc","tuneLength", "tuneGrid"),
+  Definition = c(
+    "For the default method, x is an object where samples are in rows and features are in columns. This could be a simple matrix, data frame or other type (e.g. sparse matrix) but must have column names (see Details below). Preprocessing using the preProcess argument only supports matrices or data frames. When using the recipe method, x should be an unprepared recipe object that describes the model terms (i.e. outcome, predictors, etc.) as well as any pre-processing that should be done to the data. This is an alternative approach to specifying the model. Note that, when using the recipe method, any arguments passed to preProcess will be ignored.",
+    "A numeric or factor vector containing the outcome for each sample.",
+    "A string specifying which classification or regression model to use. Possible values are found using names(getModelInfo())",
+    "A list of values that define how this function acts.",
+    "A string that specifies what summary metric will be used to select the optimal model. By default, possible values are 'RMSE' and 'Rsquared' for regression and 'Accuracy' and 'Kappa' for classification. If custom performance metrics are used (via the summaryFunction argument in trainControl, the value of metric should match one of the arguments. If it does not, a warning is issued and the first metric given by the summaryFunction", 
+    "A string vector that defines a pre-processing of the predictor data. Current possibilities are 'BoxCox', 'YeoJohnson', 'expoTrans', 'center', 'scale', 'range',       'knnImpute', 'bagImpute', 'medianImpute', 'pca', 'ica' and 'spatialSign'. The default is no pre-processing. See preProcess and trainControl on the procedures and      how to adjust them. Pre-processing code is only designed to work when x is a simple matrix or data frame.",
+    "An integer denoting the amount of granularity in the tuning parameter grid. By default, this argument is the number of levels for each tuning parameters that should be generated by train",
+    "A data frame with possible tuning values. The columns are named the same as the tuning parameters. Use getModelInfo to get a list of tuning parameters for each model "
+  )
+)
+
+kable(train_tbl, "html") 
+```
+
+##### GBM
+
+Design the parameter tuning grid
+```{r}
+## Not Updated for real model yet
+#grid <- expand.grid(size=c(5,10,15,20,25,30,35,40,45,50), k=c(3,5))
+```
+
+```{r}
+#Training the gbm
+m_gbm <- train(x = train[,predictors], 
+               y = train[,myLabel], 
+               method = 'gbm', 
+               trControl = control,  
+               metric = "Accuracy"
+               ,preProc = c("center", "scale")
+#               ,tuneLength=5
+#               ,tuneGrid=grid
+               )
+
+```
+
+```{r}
+print(m_gbm)
+plot(m_gbm)
+```
+
+##### Ranger
+
+Design the parameter tuning grid
+```{r}
+## Not Updated for real model yet
+#grid <- expand.grid(size=c(5,10,15,20,25,30,35,40,45,50), k=c(3,5))
+```
+
+```{r}
+#Training a ranger model
+m_ranger <- train(x = train[,predictors], 
+               y = train[,myLabel], 
+               method = 'ranger', 
+               trControl = control,  
+               metric = "Accuracy"
+               ,preProc = c("center", "scale")
+#               ,tuneLength=5
+#               ,tuneGrid=grid
+               )
+```
+
+```{r}
+print(m_ranger)
+plot(m_ranger)
+```
+
+
+
+##### LVQ
+
+Design the parameter tuning grid
+```{r}
+grid <- expand.grid(size=c(5,10,15,20,25,30,35,40,45,50), k=c(3,5))
+```
+
+```{r}
+#Training the lvq
+m_lvq <- train(x = train[,predictors], 
+               y = train[,myLabel], 
+               method = 'lvq', 
+               trControl = control,  
+               metric = "Accuracy",
+#               tuneLength=5,
+               tuneGrid=grid
+               )
+```
+
+```{r}
+print(m_lvq)
+plot(m_lvq)
+```
+
+
+##### Logistic Regression
+
+Design the parameter tuning grid
+```{r}
+## Not Updated for real model yet
+#grid <- expand.grid(size=c(5,10,15,20,25,30,35,40,45,50), k=c(3,5))
+```
+
+```{r}
+m_logit <- train(x = train[,predictors], 
+                 y = train[,myLabel], 
+                 method ="LogitBoost", 
+                 trControl = control,
+                 metric = "Accuracy"
+                 ,tuneLength=5
+#                 ,tuneGrid=grid
+                 )
+```
+
+```{r}
+print(m_logit)
+plot(m_logit)
+```
+
+##### KNN
+
+Design the parameter tuning grid
+```{r}
+## Not Updated for real model yet
+#grid <- expand.grid(size=c(5,10,15,20,25,30,35,40,45,50), k=c(3,5))
+```
+
+```{r}
+#Training the random forest model
+m_knn <- train(x = train[,predictors], 
+               y = train[,myLabel], 
+               method ="knn", 
+               trControl = control,
+               metric = "Accuracy"
+               ,tuneLength=5
+#               ,tuneGrid=grid
+               )
+```
+
+```{r}
+print(m_knn)
+plot(m_knn)
+```
+
+
+
+
+
+#### Model Predictions and Accuracy
+
+##### Predict
+
+```{r}
+#GBM
+p_gbm <- predict(object=m_gbm, test[,predictors], type='raw')
+head(p_gbm)
+
+#Ranger
+p_ranger <- predict(object=m_ranger, test[,predictors], type='raw')
+head(p_ranger)
+
+#LVQ
+p_lvq <- predict(m_lvq, newdata = test[,predictors])
+head(p_lvq)
+
+#Logistic Regression
+p_logit <- predict(m_logit, newdata = test[,predictors])
+head(p_logit)
+
+#KNN
+p_knn <- predict(m_knn, newdata = test[,predictors])
+head(p_knn)
+
+```
+
+Confusion Matrix
+```{r}
+#confusionMatrix(test$Survived2,test$p_rf)
+```
+
+
+##### Resamples
+
+```{r}
+# calculate resamples
+resample_results <- resamples(list(gbm=m_gbm, ranger=m_ranger, logit=m_logit, knn=m_knn, lvq=m_lvq))
+
+resample_results
+```
+
+##### Print Performance Metric Results
+
+```{r}
+# print results to console
+summary(resample_results)
+```
+
+
+> Change the performance metric, must be one listed above
+
+```{r}
+# plot Kappa values
+densityplot(resample_results , metric = "Accuracy" ,auto.key = list(columns = 3))
+```
+
+> Change the performance metric
+
+```{r}
+# plot all (higher is better)
+
+bwplot(resample_results , metric = c("Accuracy"))
+```
+
+
+
+
+##### Predict for a certain model
+
+
+```{r}
+# print confusion matrix (rather large here)
+ confusionMatrix(p_gbm, test$Embarked)
+
+# postResample accuracy
+# postResample(predictions, validation$species)
+```
+
+
+
+#### Simple Average Ensemble
+
+```{r}
+p1 <- predict(m_pam, test, preProcess = c("center", "scale"),type = "prob")
+p3 <- predict(m_kknn, test, preProcess = c("center", "scale"),type = "prob")
+p4 <- predict(m_sda, test, preProcess = c("center", "scale"),type = "prob")
+p5 <- predict(m_pda, test, preProcess = c("center", "scale"),type = "prob")
+p6 <- predict(m_slda, test, preProcess = c("center", "scale"),type = "prob")
+
+p_all =  ((p1+p3+p4+p5+p6)/6)
+
+p_all
+```
+
+
+
+
+
+
+
+
+
+
+
+
+### Set Model Training Control Parameters
+
+Notice that we are explicitly setting the resampling index to being used in trainControl. If you do not set this index manually, caretList will attempt to set it for automatically, but it“s generally a good idea to set it yourself.
+
+```{r}
+
+## multiClass Predictor
+#control <- trainControl(method="cv", number=10, repeats=3, classProbs= TRUE, summaryFunction = multiClassSummary)
+
+
+## Two class prediction
+control <- trainControl(
+  method="boot",
+  number=25,
+  savePredictions="final",
+  classProbs=TRUE,
+  index=createResample(train$Survived, 25),
+  summaryFunction=twoClassSummary
+  )
+```
+
+### Create Model List
+
+caretList is a flexible function for fitting many different caret models, with the same resampling parameters, to the same dataset. It returns a convenient list of caret objects which can later be passed to caretEnsemble and  caretStack. 
+
+caretEnsemble has 2 arguments that can be used to specify which models to fit: methodList and tuneList.  methodList is a simple character vector of methods that will be fit with the default train parameters, while  tuneList can be used to customize the call to each component model
+
+Now we can use caretList to fit a series of models (each with the same trControl):
+
+> MethodList determines the models to use
+
+```{r}
+model_list <- caretList(
+  test[,predictors], 
+  test[,myLabel], 
+  data=test,
+  trControl=control,
+  methodList=c("gbm", "LogitBoost")
+  )
+```
+
+We can use the predict function to extract predicitons from this object for new data:
+```{r}
+p <- as.data.frame(predict(model_list, newdata=test))
+print(p)
+```
+
+#### Examine Model List
+
+The two models can be plotted to look for correlation between them. You want the models to be uncorrelated to be good candidates for an ensemble model.
+```{r}
+xyplot(resamples(model_list))
+```
+
+The correlation can be confirmed
+```{r}
+modelCor(resamples(model_list))
+```
+
+### Test Model Performance
+
+#### Simple Greedy Ensemble 
+>summaryFunction has to be adjusted to fit the model type
+
+```{r}
+greedy_ensemble <- caretEnsemble(
+  model_list, 
+  metric="ROC",
+  trControl=trainControl(
+    number=2,
+    summaryFunction=twoClassSummary,
+    classProbs=TRUE
+    ))
+summary(greedy_ensemble)
+```
+
+The ensemble can be tested directly against the component methods.
+```{r}
+
+model_preds <- lapply(model_list, predict, newdata=test, type="prob")
+model_preds <- lapply(model_preds, function(x) x[,"M"])
+model_preds <- data.frame(model_preds)
+
+ens_preds <- predict(greedy_ensemble, newdata=test, type="prob")
+model_preds$ensemble <- ens_preds
+caTools::colAUC(model_preds, testing$Class)
+```
+
+##### Extract Variable Importance
+
+We can also use varImp to extract the variable importances from each member of the ensemble, as well as the final ensemble model:
+```{r}
+varImp(greedy_ensemble)
+```
+
+#### Meta-Model Ensemble
+
+caretStack allows us to move beyond simple blends of models to using “meta-models” to ensemble collections of predictive models. DO NOT use the trainControl object you used to fit the training models to fit the ensemble. The re-sampling indexes will be wrong. Fortunately, you don“t need to be fastidious with re-sampling indexes for caretStack, as it only fits one model, and the defaults train uses will usually work fine:
+```{r}
+glm_ensemble <- caretStack(
+  model_list,
+  method="glm",
+  metric="ROC",
+  trControl=trainControl(
+    method="boot",
+    number=10,
+    savePredictions="final",
+    classProbs=TRUE,
+    summaryFunction=twoClassSummary
+  )
+)
+model_preds2 <- model_preds
+model_preds2$ensemble <- predict(glm_ensemble, newdata=testing, type="prob")
+CF <- coef(glm_ensemble$ens_model$finalModel)[-1]
+colAUC(model_preds2, testing$Class)
+```
+
+
+
+
+
+
+```{r}
+
+# calculate resamples // exclude SIMCA and PLS
+resample_results <- resamples(list(KKNN=m_kknn,PDA=m_pda,SDA=m_sda, 
+		    SLDA=m_slda, HDDA=m_hdda, PAM=m_pam, C5TREE=m_C5))
+
+# print results to console
+summary(resample_results,metric = c("Kappa","Accuracy","logLoss"))
+```
+
+
+
+
+```{r}
+
+# Example of Stacking algorithms
+# create submodels
+control <- trainControl(method="repeatedcv", number=10, repeats=3, savePredictions=TRUE, classProbs=TRUE)
+algorithmList <- c('lda', 'rpart', 'glm', 'knn', 'svmRadial')
+set.seed(seed)
+models <- caretList(Class~., data=dataset, trControl=control, methodList=algorithmList)
+results <- resamples(models)
+summary(results)
+dotplot(results)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Regression
+
+
+
+
+
+# Unsupervised
+
+## Classification
+
+## Regression
+
+
+# Additional Tools
+
+## Caret Package
+
+### Understand Model Options
+
+See a complete list of all caret models
+```{r}
+modelnames <- names(getModelInfo())
+```
+
+### Check Individual Models Use Cases
+
+Shows whether a particular model can be used for Classification, Regression, or both
+
+```{r}
+for (i in 1:3){
+
+test <- getModelInfo()$modelnames[i]$type
+print(test)
+}
+
+#getModelInfo()$glm$type
+
+```
+
+
+
+
+
+
+
+
