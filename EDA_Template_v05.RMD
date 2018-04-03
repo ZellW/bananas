@@ -68,11 +68,18 @@ border-top: ;
 # Load Libraries
 
 ```{r loadPackages, message=FALSE, warning=FALSE}
-
+if(!require(IEDA)){devtools::install_github("krupanss/IEDA")}
 if(!require(easypackages)){install.packages("easypackages")}
 packages("Hmisc", "funModeling", "GGally", "VIM", "DataExplorer", "PerformanceAnalytics", 
          "corrplot","plyr", "dplyr", "tidyr", "knitr", "mice","kableExtra", "readr", "caret", 
-         "lubridate", "gridExtra","missForest", prompt = FALSE)
+         "lubridate", "gridExtra","missForest", "IEDA", prompt = FALSE)
+```
+
+> For quick EDA, particulalrly in front of a client, try IEDA
+
+```{r IEDA, eval=FALSE}
+library(DT)
+runIEDA()
 ```
 
 # Import Data
