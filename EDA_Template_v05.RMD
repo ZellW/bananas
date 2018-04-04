@@ -62,6 +62,7 @@ border-top: ;
 5. Revisit automatic datetime identification (maybe using grepl)
 6. Add pirate charts using yarrr package
 7. Consider adding Amelia for imputation method
+8. Evaluate randomForestExplainer, xgboostExplainer and potentially lightgbmExplainer 
 
 --------
 
