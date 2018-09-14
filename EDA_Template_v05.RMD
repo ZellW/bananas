@@ -1,3 +1,4 @@
+
 ---
 title: "Exploratory Analysis Template"
 output:
@@ -65,7 +66,7 @@ border-top: ;
 8. Evaluate randomForestExplainer, xgboostExplainer and potentially lightgbmExplainer 
 9. Evaluate imputed data using marginplot from VIM https://www.r-bloggers.com/graphical-presentation-of-missing-data-vim-package/
 10.  Consider including methodology to develop testing data.  See https://github.com/trinker/wakefield
-
+11. Add `skimr`
 
 
 --------
